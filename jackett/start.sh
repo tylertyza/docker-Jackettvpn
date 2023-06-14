@@ -116,6 +116,7 @@ if [ -e /proc/$jackettpid ]; then
 	DEFAULT_HOST="one.one.one.one"
 	INTERVAL=${HEALTH_CHECK_INTERVAL}
 	DEFAULT_INTERVAL=300
+	DEFAULT_HEALTH_CHECK_AMOUNT=1
 	
 	# If host is zero (not set) default it to the DEFAULT_HOST variable
 	if [[ -z "${HOST}" ]]; then
@@ -135,18 +136,38 @@ if [ -e /proc/$jackettpid ]; then
 		HEALTH_CHECK_SILENT=1
 	fi
 
+	if [ ! -z ${RESTART_CONTAINER} ]; then
+		echo "[INFO] RESTART_CONTAINER defined as '${RESTART_CONTAINER}'" | ts '%Y-%m-%d %H:%M:%.S'
+	else
+		echo "[WARNING] RESTART_CONTAINER not defined,(via -e RESTART_CONTAINER), defaulting to 'yes'" | ts '%Y-%m-%d %H:%M:%.S'
+		export RESTART_CONTAINER="yes"
+	fi
+
+	# If HEALTH_CHECK_AMOUNT is zero (not set) default it to DEFAULT_HEALTH_CHECK_AMOUNT
+	if [[ -z ${HEALTH_CHECK_AMOUNT} ]]; then
+		echo "[INFO] HEALTH_CHECK_AMOUNT is not set. For now using default interval of ${DEFAULT_HEALTH_CHECK_AMOUNT}" | ts '%Y-%m-%d %H:%M:%.S'
+		HEALTH_CHECK_AMOUNT=${DEFAULT_HEALTH_CHECK_AMOUNT}
+	fi
+	echo "[INFO] HEALTH_CHECK_AMOUNT is set to ${HEALTH_CHECK_AMOUNT}" | ts '%Y-%m-%d %H:%M:%.S'
+
 	while true; do
 		# Ping uses both exit codes 1 and 2. Exit code 2 cannot be used for docker health checks, therefore we use this script to catch error code 2
-		ping -c 1 $HOST > /dev/null 2>&1
+		ping -c ${HEALTH_CHECK_AMOUNT} $HOST > /dev/null 2>&1
 		STATUS=$?
 		if [[ "${STATUS}" -ne 0 ]]; then
-			echo "[ERROR] Network is down, exiting this Docker" | ts '%Y-%m-%d %H:%M:%.S'
-			exit 1
+			echo "[ERROR] Network is possibly down." | ts '%Y-%m-%d %H:%M:%.S'
+			sleep 1
+			if [[ ${RESTART_CONTAINER,,} == "1" || ${RESTART_CONTAINER,,} == "true" || ${RESTART_CONTAINER,,} == "yes" ]]; then
+				echo "[INFO] Restarting container." | ts '%Y-%m-%d %H:%M:%.S'
+				exit 1
+			fi
 		fi
-		if [ ! "${HEALTH_CHECK_SILENT}" -eq 1 ]; then
+		if [[ ${HEALTH_CHECK_SILENT,,} == "0" || ${HEALTH_CHECK_SILENT,,} == "false" || ${HEALTH_CHECK_SILENT,,} == "no" ]]; then
 			echo "[INFO] Network is up" | ts '%Y-%m-%d %H:%M:%.S'
 		fi
-		sleep ${INTERVAL}
+		sleep ${INTERVAL} &
+		# combine sleep background with wait so that the TERM trap above works
+		wait $!
 	done
 else
 	echo "[ERROR] Jackett failed to start!" | ts '%Y-%m-%d %H:%M:%.S'
