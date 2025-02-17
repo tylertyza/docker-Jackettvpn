@@ -12,7 +12,7 @@ while : ; do
 done
 
 # identify docker bridge interface name (probably eth0)
-docker_interface=$(netstat -ie | grep -vE "lo|tun|tap|wg" | sed -n '1!p' | grep -P -o -m 1 '^[\w]+')
+docker_interface="net1"
 if [[ "${DEBUG}" == "true" ]]; then
 	echo "[DEBUG] Docker interface defined as ${docker_interface}" | ts '%Y-%m-%d %H:%M:%.S'
 fi
